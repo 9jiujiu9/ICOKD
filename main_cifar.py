@@ -18,17 +18,12 @@ from itertools import chain
 
 from bisect import bisect_right
 import time
-import math
 
 import numpy as np
 import torch.nn as nn
-from torch.autograd import Variable
-from torch.nn.modules.loss import _WeightedLoss
-
-from losses.cifar_sup_mcl_loss import Sup_MCL_Loss
-from dataset.class_sampler import MPerClassSampler
 from dataset.cifar100 import get_cifar100_dataloaders, get_cifar100_dataloaders_sample
-from losses.criterion import CRCDLoss
+from dataset.cifar10 import get_cifar10_dataloaders, get_cifar10_dataloaders_sample
+from losses.IFCD import IFCDLoss
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
 parser.add_argument('--data', default='./data/', type=str, help='Dataset directory')
@@ -86,39 +81,21 @@ np.random.seed(args.manual_seed)
 torch.manual_seed(args.manual_seed)
 torch.cuda.manual_seed_all(args.manual_seed)
 
-num_classes = 100
-# trainset = torchvision.datasets.CIFAR100(root=args.data, train=True, download=True,
-#                                          transform=transforms.Compose([
-#                                              transforms.RandomCrop(32, padding=4),
-#                                              transforms.RandomHorizontalFlip(),
-#                                              transforms.ToTensor(),
-#                                              transforms.Normalize([0.5071, 0.4867, 0.4408],
-#                                                                   [0.2675, 0.2565, 0.2761])
-#                                          ]))
-
-# testset = torchvision.datasets.CIFAR100(root=args.data, train=False, download=True,
-#                                         transform=transforms.Compose([
-#                                             transforms.ToTensor(),
-#                                             transforms.Normalize([0.5071, 0.4867, 0.4408],
-#                                                                  [0.2675, 0.2565, 0.2761]),
-#                                         ]))
-
-# trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
-#                                           sampler=MPerClassSampler(labels=trainset.targets, m=2,
-#                                                                    batch_size=args.batch_size,
-#                                                                    length_before_new_iter=len(trainset.targets)),
-#                                           pin_memory=(torch.cuda.is_available()))
-
-# testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size, shuffle=False,
-#                                          pin_memory=(torch.cuda.is_available()))
-# --------------------------------------------------------------------------------------------
 if args.dataset == 'cifar100':
         trainloader, testloader, n_data = get_cifar100_dataloaders_sample(batch_size=args.batch_size,
                                                                            num_workers=args.num_workers,
                                                                            k=args.nce_k,
                                                                            mode=args.mode)
-       
+        num_classes = 100
         n_cls = 100
+elif args.dataset == 'cifar10':
+        trainloader, testloader, n_data = get_cifar10_dataloaders_sample(root=args.data,
+                                                                         batch_size=args.batch_size,
+                                                                           num_workers=args.num_workers,
+                                                                           k=args.nce_k,
+                                                                           mode=args.mode)
+        num_classes = 10
+        n_cls = 10
 else:
     raise NotImplementedError(args.dataset)
 
@@ -142,10 +119,6 @@ def train(epoch, criterion_list, optimizer):
     train_loss_cls = AverageMeter('train_loss_cls', ':.4e')
     train_loss_logit_kd = AverageMeter('train_loss_logit_kd', ':.4e')
     train_loss_fea = AverageMeter('train_loss_logit_fea', ':.4e')
-    # train_loss_vcl = AverageMeter('train_loss_vcl', ':.4e')
-    # train_loss_icl = AverageMeter('train_loss_icl', ':.4e')
-    # train_loss_soft_vcl = AverageMeter('train_loss_soft_vcl', ':.4e')
-    # train_loss_soft_icl = AverageMeter('train_loss_soft_icl', ':.4e')
 
     top1_num = [0] * args.number_net
     top5_num = [0] * args.number_net
@@ -157,9 +130,6 @@ def train(epoch, criterion_list, optimizer):
     criterion_ce = criterion_list[0]
     criterion_div = criterion_list[1]
     criterion_kd = criterion_list[2]
-    # criterion_afd2 = criterion_list[4]
-    # criterion_afd3 = criterion_list[5]
-    LSLoss = LabelSmoothingLoss(classes=100)
 
     net.train()
     for batch_idx, (inputs, targets, index, contrast_idx) in enumerate(trainloader):
@@ -169,80 +139,18 @@ def train(epoch, criterion_list, optimizer):
         index = index.cuda()
         contrast_idx = contrast_idx.cuda()
 
-        # r = np.random.rand(1)
-        # if args.beta > 0 and r < args.cutmix_prob:
-        #     # generate mixed sample
-        #     lam = np.random.beta(args.beta, args.beta)
-        #     rand_index = torch.randperm(input.size()[0]).cuda()
-        #     target_a = targets
-        #     target_b = targets[rand_index]
-        #     bbx1, bby1, bbx2, bby2 = rand_bbox(input.size(), lam)
-        #     input[:, :, bbx1:bbx2, bby1:bby2] = input[rand_index, :, bbx1:bbx2, bby1:bby2]
-        #     # adjust lambda to exactly match pixel ratio
-        #     lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (input.size()[-1] * input.size()[-2]))
-
-        # r = np.random.rand(1)
-        # if r < args.cutmix_prob:
-        #     # generate mixed sample
-        #     lam = np.random.beta(args.beta, args.beta)
-        #     rand_index = torch.randperm(inputs.size()[0]).cuda()
-        #     target_a = targets
-        #     target_b = targets[rand_index]
-        #     bbx1, bby1, bbx2, bby2 = rand_bbox(inputs.size(), lam)
-        #     # batch_idx_updated= inputs.clone()
-        #     inputs[:, bbx1:bbx2, bby1:bby2, :] = inputs[rand_index, bbx1:bbx2, bby1:bby2, :]
-        #     # adjust lambda to exactly match pixel ratio
-        #     lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (inputs.size()[-1] * inputs.size()[-2]))
-        #     targets = target_a * lam + target_b * (1. - lam)
-
         optimizer.zero_grad()
         logits, embedding, f = net(inputs)
 
-        # a=torch.tensor([f[0]])
-        # # print(a.shape)
-        # print(a.size())
-
-        # b=torch.tensor(f)
-        # # print(b.shape)
-        # print(b.size())
-
-        # c=torch.tensor([x_totalfea[0]])
-        # # print(c.shape)
-        # print(c.size())
-
         loss_cls = torch.tensor(0.).cuda()
         loss_logit_kd = torch.tensor(0.).cuda()
-        # MSEloss = nn.MSELoss(reduction='mean').cuda()
         loss_fea = torch.tensor(0.).cuda()
         
 
         for i in range(len(logits)):
             loss_cls = loss_cls + criterion_ce(logits[i], targets)
 
-        # ensemble_logits = 0.
-        # for i in range(len(logits)):
-        #     ensemble_logits = ensemble_logits + logits[i]
-        # ensemble_logits = ensemble_logits / (len(logits))
-
-        # ensemble_logits = ensemble_logits.detach()
-
-        # ensemble_logits = fea_logit.detach()
-        # loss_fea = loss_fea + 1/3 * criterion_kd(f[0], f[3], index, contrast_idx)
-        # loss_fea = loss_fea + 1/3 * criterion_kd(f[1], f[4], index, contrast_idx)
-        # loss_f = loss_f + criterion_fea(embedding[0], embedding[1])
         loss_fea = loss_fea + criterion_kd(f[2], f[5], index, contrast_idx)
-        # fea_logit=0
-        # for i in range(len(f_logits)):
-        #     fea_logit=fea_logit+f_logits[i]
-        # fea_logit=fea_logit/len(f_logits)
-        #
-        # fea_logit=fea_logit.detach()
-        # if args.epochs % args.number_net == 0:
-        #     f_to = x_t[1]
-        # elif args.epochs % args.number_net == 1:
-        #     f_to = x_t[2]
-        # else:
-        #     f_to = x_t[3]
         
         criterion_cls_lc = nn.CrossEntropyLoss(reduction='none')
         loss_t_list = [criterion_cls_lc(logit_s, targets) for logit_s in logits]
@@ -252,100 +160,11 @@ def train(epoch, criterion_list, optimizer):
         for i in range(len(logits)-1):
             loss_div_list.append(0.5 * (criterion_div(logits[i], logits[i+1],is_ca=True) + criterion_div(logits[i+1], logits[i],is_ca=True)))
         loss_div_list.append(0.5 * (criterion_div(logits[i+1], logits[0],is_ca=True) + criterion_div(logits[i+1], logits[0],is_ca=True)))
-        #     loss_div_list.append(criterion_div(logits[i], logits[i+1],is_ca=True))
-        # loss_div_list.append(criterion_div(logits[i+1], logits[0],is_ca=True))
+        
         loss_div = torch.stack(loss_div_list, dim=0)
         bsz = loss_div.shape[1]
         loss_logit_kd = (torch.mul(attention, loss_div).sum()) / (1.0*bsz*args.number_net) 
-            # else:
-            #     loss_logit_kd = loss_logit_kd + criterion_div(logits[-1], ensemble_logits)
-            # loss_logit_kd = loss_logit_kd + criterion_div(fea_logit, ensemble_logits)
-            # loss_logit_kd = loss_logit_kd + criterion_div(ensemble_logits, f_logits)
-            # loss_logit_kd = loss_logit_kd + criterion_div(ensemble_logits, f_to)
 
-        # for i in range(len(f_logits)-1):
-        #     loss_logit_kd = loss_logit_kd + criterion_div(f_logits[i], f_logits[i+1])
-        #     loss_logit_kd = loss_logit_kd + criterion_div(f_logits[i+1], f_logits[i])
-        # #     loss_logit_kd = loss_logit_kd + criterion_div(logits[i], f_logits[i])
-        # #     loss_logit_kd = loss_logit_kd + criterion_div(logits[i], f_logits[i])
-        # # loss_logit_kd = loss_logit_kd + criterion_div(logits[i+1], f_logits[i+1])
-        # # loss_logit_kd = loss_logit_kd + criterion_div( f_logits[i + 1],logits[i+1])
-        #     loss_logit_kd = loss_logit_kd + criterion_div(logits[i], f_logits[i])
-        # loss_logit_kd = loss_logit_kd + criterion_div(logits[i + 1], f_logits[i + 1])
-
-        # if args.logit_distill:
-        #     for i in range(args.number_net):
-        #         # logits[i]=F.interpolate(logits[i],size=[100])
-        #         # im1_torch = torch.from_numpy(logits[i].unsqueeze(0))
-        #         # torch_resize = Resize([100]) # 定义Resize类对象
-        #         # x = torch_resize(logits[i])
-        #         feature_logits=torch.reshape(feature_logits,[64, 100])
-        #         logits[i]=logits[i].cuda()
-        #         feature_logits=feature_logits.cuda()
-        #         loss_logit_kd = loss_logit_kd + criterion_div(logits[i], feature_logits)
-        #     loss_logit_kd=loss_logit_kd+criterion_div(feature_logits, ensemble_logits)
-
-        # for i in range(args.number_net):
-        #     for j in range(i*3,i*3+3):
-        #         loss_fd = loss_fd + criterion_fd(f[j], x_totalfea[i])
-
-        # loss_fea = criterion_fea(embedding, targets,f_t)
-        # fea_logit kl
-        # loss_vcl, loss_soft_vcl, loss_icl, loss_soft_icl = criterion_fea(embedding, targets,f_t)
-        # loss_mcl = args.alpha * loss_vcl + args.gamma * loss_soft_vcl \
-        #        + args.beta * loss_icl + args.lam * loss_soft_icl
-        
-        # loss = loss_cls + loss_logit_kd + loss_mcl
-        # f_t=f_t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        # for i in range(len(f)):
-        #     g=torch.Tensor(f[i])
-        # g=g.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-        # for i in range(args.number_net):
-        #     for j in range(i*3,i*3+3):
-        #         loss_fea += criterion_feature(g[j], f_t[i].detach())
-
-        # for i in range(args.number_net):
-        #         loss_fea += criterion_feature(f_t[i], x_totalfea.detach())
-
-# 特征蒸馏
-#         for i in range(3):
-#             f[i] = f[i].unsqueeze(-1).unsqueeze(-1)
-#             f[i + 3] = f[i + 3].unsqueeze(-1).unsqueeze(-1)
-#
-#             if i%3==0:
-#                 loss_fea = loss_fea + args.gamma * (criterion_list[3](f[i], f[i + 3].detach()))
-#                 loss_fea = loss_fea + args.gamma * (criterion_list[3](f[i + 3], f[i].detach()))
-#             elif i%3==1:
-#                 loss_fea = loss_fea + args.gamma * (criterion_list[4](f[i], f[i + 3].detach()))
-#                 loss_fea = loss_fea + args.gamma * (criterion_list[4](f[i + 3], f[i].detach()))
-#             else:
-#                 loss_fea = loss_fea + args.gamma * (criterion_list[5](f[i], f[i + 3].detach()))
-#                 loss_fea = loss_fea + args.gamma * (criterion_list[5](f[i + 3], f[i].detach()))
-        # x_totalfea=x_totalfea.unsqueeze(-1).unsqueeze(-1)
-        # for i in range(args.number_net):
-        #     f_t[i]=f_t[i].unsqueeze(-1).unsqueeze(-1)
-        #     loss_fea += args.gamma*(criterion_list[3](f_t[i], x_totalfea.detach()))
-
-        # for m in range(args.number_net):
-        #     for j in range(len(f)):
-        #         f[j]=f[j].unsqueeze(-1).unsqueeze(-1)
-        #         total=f_t[m].unsqueeze(-1).unsqueeze(-1)
-        #         # con=nn.Conv2d(1200, 128, kernel_size=1)
-        #         # x_totalf=con(x_totalfea)
-        #         loss_fea += args.gamma*(criterion_list[3](f[j], total.detach()))
-
-        # f_t[0]=f_t[0].unsqueeze(-1).unsqueeze(-1)
-        # for i in range(args.number_net-1):
-        #     # f_t[i] = f_t[i].unsqueeze(-1).unsqueeze(-1)
-        #     f_t[i+1]=f_t[i+1].unsqueeze(-1).unsqueeze(-1)
-        #     # con=nn.Conv2d(1200, 128, kernel_size=1)
-        #     # x_totalf=con(x_totalfea)
-        #     loss_fea = loss_fea + args.gamma * (criterion_list[3](f_t[i], f_t[i+1].detach()))
-        #     loss_fea = loss_fea + args.gamma * (criterion_list[3](f_t[i+1], f_t[i].detach()))
-        # for i in range(args.number_net):
-        #     embedding[i]=embedding[i].unsqueeze(-1).unsqueeze(-1)
-        #     x_totalfea=x_totalfea.unsqueeze(-1).unsqueeze(-1)
-        #     loss_fea += criterion_feature(embedding[i], x_totalfea.detach())
 
         loss = args.gamma * loss_cls + args.alpha * loss_logit_kd + args.beta * loss_fea
 
@@ -357,10 +176,6 @@ def train(epoch, criterion_list, optimizer):
         train_loss_logit_kd.update(loss_logit_kd.item(), inputs.size(0))
         
         train_loss_fea.update(loss_fea.item(), inputs.size(0))
-        # train_loss_vcl.update(args.alpha * loss_vcl.item(), inputs.size(0))
-        # train_loss_soft_vcl.update(args.gamma * loss_soft_vcl.item(), inputs.size(0))
-        # train_loss_icl.update(args.beta * loss_icl.item(), inputs.size(0))
-        # train_loss_soft_icl.update(args.lam * loss_soft_icl.item(), inputs.size(0))
 
         for i in range(len(logits)):
             top1, top5 = correct_num(logits[i], targets, topk=(1, 5))
@@ -380,39 +195,13 @@ def train(epoch, criterion_list, optimizer):
                 '\t Train_loss_cls:{:.5f}'
                 '\t Train_loss_logit_kd:{:.5f}'
                 '\t Train_loss_fea:{:.5f}'
-                # '\t Train_loss_soft_vcl:{:.5f}'
-                # '\t Train_loss_icl:{:.5f}'
-                # '\t Train_loss_soft_icl:{:.5f}'
                 '\n Train top-1 accuracy: {} \n'
                 .format(epoch, lr, time.time() - start_time,
                         train_loss.avg,
                         train_loss_cls.avg,
                         train_loss_logit_kd.avg,
                         train_loss_fea.avg,
-                        # train_loss_vcl.avg,
-                        # train_loss_soft_vcl.avg,
-                        # train_loss_icl.avg,
-                        # train_loss_soft_icl.avg,
                         str(acc1)))
-
-
-def rand_bbox(size, lam):
-    W = size[2]
-    H = size[3]
-    cut_rat = np.sqrt(1. - lam)
-    cut_w = np.int(W * cut_rat)
-    cut_h = np.int(H * cut_rat)
-
-    # uniform
-    cx = np.random.randint(W)
-    cy = np.random.randint(H)
-
-    bbx1 = np.clip(cx - cut_w // 2, 0, W)
-    bby1 = np.clip(cy - cut_h // 2, 0, H)
-    bbx2 = np.clip(cx + cut_w // 2, 0, W)
-    bby2 = np.clip(cy + cut_h // 2, 0, H)
-
-    return bbx1, bby1, bbx2, bby2
 
 
 def test(epoch, criterion_ce):
@@ -423,8 +212,6 @@ def test(epoch, criterion_ce):
     top1_num = [0] * (args.number_net + 1)
     top5_num = [0] * (args.number_net + 1)
     total = [0] * (args.number_net + 1)
-
-    LSLoss = LabelSmoothingLoss(classes=100)
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
@@ -511,38 +298,19 @@ if __name__ == '__main__':
         net.eval()
         logits, embedding, f = net(data)
 
-        # args.rep_dim = []
-        # args.rep_dimen = []
-        # args.rep_dime = []
-        # # args.rep_dimtotal=[]
-        # for x in embedding:
-        #     args.rep_dim.append(x.size(1))
-        # for y in f_t:
-        #     args.rep_dimen.append(y.size(1))
-        # for m in c:
-        #     args.rep_dime.append(m.size(1))
-        # args.rep_dimtotal.append(x_totalfea.size(1))
-
-        # criterion_fea = Sup_MCL_Loss(args)
-        # trainable_list.append(criterion_fea.embed_list)
 
         args.n_data = n_data
-        criterion_kd = CRCDLoss(args)
+        criterion_kd = IFCDLoss(args)
         trainable_list.append(criterion_kd.embed_s)
         trainable_list.append(criterion_kd.embed_t)
-        # s_channels  = embedding[i].size(1)
-        # t_channels  = x_totalfea.size(1)
+        
 
         criterion_list = nn.ModuleList([])
         criterion_list.append(criterion_ce)
         criterion_list.append(criterion_div)
         criterion_list.append(criterion_kd)
-        # criterion_list.append(AFD(f[0].size(1), args.att_f))
-        # criterion_list.append(AFD(f[1].size(1), args.att_f))
-        # criterion_list.append(AFD(f[2].size(1), args.att_f))
+        
         criterion_list.cuda()
-
-
 
         optimizer = optim.SGD(trainable_list.parameters(),
                                       lr=0.1, momentum=0.9, weight_decay=args.weight_decay, nesterov=True)

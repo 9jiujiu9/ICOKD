@@ -23,13 +23,13 @@ CIFAR-100 : [download](http://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz)
 
 ### Training two baseline networks
 ```
-python main_cifar.py --arch resnet32 --number-net 2 --alpha 0 --beta 0
+python main_cifar.py --arch resnet32 --number-net 2 --feat-dim 64 --alpha 0 --beta 0
 ```
 More commands for training various architectures can be found in `scripts/train_cifar_baseline.sh`
 
 ### Training two networks
 ```
-python main_cifar.py --arch resnet32  --number-net 2 
+python main_cifar.py --arch resnet32 --feat-dim 64  --number-net 2 
 
 More commands for training various architectures can be found in `scripts/train_cifar.sh`
 
@@ -44,6 +44,6 @@ More commands for training various architectures can be found in `scripts/train_
 ```
 ### Training two networks
 ```
-python main_imagenet.py --dataset imagenet --arch resnet18  --number-net 2
+python main_imagenet.py --dataset imagenet --arch resnet18  --number-net 2  --feat-dim 512
 ```
 More commands for training various architectures can be found in `scripts/train_other.sh`
