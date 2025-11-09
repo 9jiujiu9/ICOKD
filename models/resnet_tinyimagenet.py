@@ -204,39 +204,13 @@ class CIFAR_ResNet(nn.Module):
 def resnet18(num_classes, number_net):
     return CIFAR_ResNet(PreActBlock, [2,2,2,2], num_classes=num_classes, number_net=number_net)
 
-# def CIFAR_ResNet18_zipf(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(PreActBlock, [2,2,2,2], num_classes=num_classes, number_net=number_net)
 
-# def CIFAR_ResNet18_byot(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(PreActBlock, [2,2,2,2], num_classes=num_classes, number_net=number_net)
 
 
 def resnet34(num_classes, number_net):
     return CIFAR_ResNet(PreActBlock, [3,4,6,3], num_classes=num_classes, number_net=number_net)
 
-# def CIFAR_ResNet34_zipf(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(PreActBlock, [3,4,6,3], branch_layers=[[1], [1], [1]], **kwargs)
 
-# def CIFAR_ResNet34_byot(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(PreActBlock, [3,4,6,3], branch_layers=[[1, 1, 1], [1, 1], [1]], **kwargs)
-
-# def CIFAR_ResNet50(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(Bottleneck, [3,4,6,3], branch_layers=[], **kwargs)
-
-# def CIFAR_ResNet50_zipf(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(PreActBlock, [3,4,6,3], branch_layers=[[1], [1], [1]], **kwargs)
-
-# def CIFAR_ResNet50_byot(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(Bottleneck, [3,4,6,3], branch_layers=[[1, 1, 1], [1, 1], [1]], **kwargs)
-
-# def CIFAR_ResNet101(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(Bottleneck, [3,4,23,3], branch_layers=[], **kwargs)
-
-# def CIFAR_ResNet101_zipf(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(PreActBlock, [3,4,23,3], branch_layers=[[1], [1], [1]], **kwargs)
-
-# def CIFAR_ResNet101_byot(pretrained=False, **kwargs):
-#     return CIFAR_ResNet(Bottleneck, [3,4,23,3], branch_layers=[[1, 1, 1], [1, 1], [1]], **kwargs)
 
 
 if __name__ == '__main__':

@@ -323,108 +323,26 @@ class ResNet_b(nn.Module):
 
     def _forward(self, input):
         f = []
-        x_t = []
-        c=[]
         x = self.conv1(input)
-        # i = self.avgpool(x)  # B×16×1×1
-        # fea = i.view(i.size(0), -1)  # B×16
         x = self.bn1(x)
         x = self.relu(x)
-
         x = self.layer1(x)
         x1 = x
-        # x_1 = self.ca1(x)
-        # c_1=x_1.view(x_1.size(0), -1)
-        # c.append(c_1)
-        # x1 = self.avgpool(x)  # B×16×1×1
-        # f1 = x1.view(x1.size(0), -1)  # B×16
-        # f11 = self.sa1(f1, f1, f1)
-        # f11 = f11.view(f11.size(0), -1)
-
         logits = []
         embedding = []
-        t_l = []
         input = x
         for i in range(self.number_net):
             f.append(x1)
             x = getattr(self, 'layer2_' + str(i))(input)
             f.append(x)
-            # x_2 = self.ca2(x)
-            # c_2 = x_2.view(x_2.size(0), -1)
-            # c.append(c_2)
-            # x2 = self.avgpool(x)  # B×32×1×1
-            # f2 = x2.view(x2.size(0), -1)  # B×32
-            # f22 = self.sa2(f2, f2, f2)
-            # f22 = f11.view(f22.size(0), -1)
-            # f.append(f2)
             x = getattr(self, 'layer3_' + str(i))(x)
             f.append(x)
-            # x_3 = self.ca3(x)
-            # c_3 = x_3.view(x_3.size(0), -1)
             x3 = self.avgpool(x)  # B×64×1×1
             f3 = x3.view(x3.size(0), -1)  # B×64
-            # f33 = self.sa3(f3, f3, f3)
-            # f33 = f11.view(f33.size(0), -1)
-            # f.append(f3)
-
+        
             embedding.append(f3)
             x = getattr(self, 'classifier_' + str(i))(f3)
             logits.append(x)
-
-            # f_t = torch.cat([f1, f2], 1)
-            # f_t = torch.cat([f_t, f3], 1)
-            # f_ca = self.ca4(f_t.unsqueeze(-1).unsqueeze(-1))
-            # f_ca = f_ca.view(f_ca.size(0), -1)
-            # t_l.append(f_ca)
-            
-            # ff_t = self.sa(f3, f3, f3)
-            # ff_t = ff_t.view(ff_t.size(0), -1)
-            # ff_t = self.classfier_f(ff_t)
-            # x_t.append(ff_t)
-
-
-            # x_c = self.control_v1(fea)  # B×3
-            # x_c = self.bn_v1(x_c)  # B×3
-            # x_c = F.relu(x_c)  # B×3
-            # w = F.softmax(x_c, dim=1)  # B×3
-            #
-            # x_1 = self.classfier1(f1)
-            # x_2 = self.classfier2(f2)
-            # x_3 = self.classfier3(f3)
-            #
-            # w_1 = w[:, 0].repeat(x_1.size()[1], 1).transpose(0, 1)
-            # w_2 = w[:, 1].repeat(x_2.size()[1], 1).transpose(0, 1)
-            # w_3 = w[:, 2].repeat(x_3.size()[1], 1).transpose(0, 1)
-            #
-            # f_1 = w_1 * x_1
-            # f_2 = w_2 * x_2
-            # f_3 = w_3 * x_3
-            # # f=torch.cat([f,w_1*f1],1)
-            # f_t = torch.cat([f_1, f_2], 1)
-            # f_t = torch.cat([f_t, f_3], 1)
-            #
-            # ft = self.lin(f_t)
-            # t_l.append(ft)
-            #
-            # if i == 0:
-            #     x_t.append(f_t)
-            #     # x_totalfea=f_t
-            # else:
-            #     x_t.append(f_t)
-        #         x_totalfea=torch.cat([x_totalfea,f_t],1)
-        #
-        # # x = nn.BatchNorm2d(x_totalfea.size(0))
-        # x=x_totalfea.unsqueeze(-1).unsqueeze(-1)
-        # x=self.conv(x)
-        # x = self.avgpool(x)
-        # feature_logit = x.view(x.size(0), -1)
-        # # x=torch.reshape(x_totalfea,[1,60,1,1])
-        # # x = F.adaptive_avg_pool2d(F.relu(x),1)
-        # x= self.avgpool(x)
-        # # x=torch.reshape(x,[1,64])
-        # # x=x_totalfea.transpose(0,1)
-        # feature_logit = getattr(self, 'classifier_' + str(i))(x)
-        # feature_logit=1
 
         return logits, embedding, f
 
