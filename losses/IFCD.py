@@ -26,13 +26,14 @@ class IFCDLoss(nn.Module):
         # if self.emd_fc_type == "nofc":
         #     assert opt.s_dim == opt.t_dim
         #     opt.feat_dim = opt.s_dim
+        self.dim = args.feat_dim
         self.feat_dim = args.feat_dim
         self.s_dim = args.feat_dim
         self.t_dim = args.feat_dim
         self.n_data =  args.n_data
         self.nce_k = args.nce_k
-        self.embed_s = Embed(self.s_dim, self.feat_dim)
-        self.embed_t = Embed(self.t_dim, self.feat_dim)
+        self.embed_s = Embed(self.dim, self.s_dim, self.feat_dim)
+        self.embed_t = Embed(self.dim, self.t_dim, self.feat_dim)
         self.contrast = IC(self.feat_dim, self.n_data, self.nce_k, 0.05, 0.5)
         self.kl = KLDiv(T=args.kd_T)
         # self.criterion_t = ContrastLoss(opt.n_data)
@@ -139,9 +140,9 @@ class GCT(nn.Module):
 
 class Embed(nn.Module):
     """Embedding module"""
-    def __init__(self, dim_in=1024, dim_out=128,emd_fc_type='nonlinear'):
+    def __init__(self, dim, dim_in=1024, dim_out=128,emd_fc_type='nonlinear'):
         super(Embed, self).__init__()
-        self.gct = GCT(64)
+        self.gct = GCT(dim)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         if emd_fc_type == "linear":
             self.linear = nn.Linear(dim_in, dim_out)
